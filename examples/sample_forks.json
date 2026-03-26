@@ -1,0 +1,80 @@
+[
+  {
+    "fork_id": "btc_breakout_001",
+    "pre_state": {
+      "asset": "BTC",
+      "regime": "bullish",
+      "volatility": "high",
+      "breadth": "weak",
+      "funding": "overheated"
+    },
+    "trigger": "breakout with overheated derivatives",
+    "possible_branches": [
+      {"name": "long_breakout", "description": "Chase the breakout immediately"},
+      {"name": "probe_and_hedge", "description": "Open smaller size and hedge"},
+      {"name": "no_trade", "description": "Stay flat"},
+      {"name": "wait_for_failure", "description": "Short only after failure confirmation"}
+    ],
+    "chosen_branch": "long_breakout",
+    "realized_value": -2.4,
+    "estimated_outcomes": [
+      {"branch_name": "probe_and_hedge", "estimated_value": -0.3, "confidence": 0.62},
+      {"branch_name": "no_trade", "estimated_value": 0.0, "confidence": 0.9},
+      {"branch_name": "wait_for_failure", "estimated_value": 1.1, "confidence": 0.51}
+    ],
+    "constraints": {"max_risk": "1R", "mode": "capital_preservation"},
+    "provenance": {"source": "manual-demo", "domain": "trading"},
+    "confidence": 0.72,
+    "tags": ["crypto", "breakout", "risk"]
+  },
+  {
+    "fork_id": "agent_tool_001",
+    "pre_state": {
+      "task_type": "research",
+      "web_signal": "conflicted",
+      "deadline": "tight",
+      "source_quality": "mixed"
+    },
+    "trigger": "agent must answer under uncertain evidence",
+    "possible_branches": [
+      {"name": "answer_now", "description": "Answer immediately with minimal verification"},
+      {"name": "verify_then_answer", "description": "Verify sources before answering"},
+      {"name": "defer", "description": "Request more time or postpone"}
+    ],
+    "chosen_branch": "answer_now",
+    "realized_value": -0.9,
+    "estimated_outcomes": [
+      {"branch_name": "verify_then_answer", "estimated_value": 0.8, "confidence": 0.8},
+      {"branch_name": "defer", "estimated_value": -0.2, "confidence": 0.5}
+    ],
+    "constraints": {"accuracy_priority": "high"},
+    "provenance": {"source": "manual-demo", "domain": "agents"},
+    "confidence": 0.81,
+    "tags": ["agent", "verification"]
+  },
+  {
+    "fork_id": "agent_tool_002",
+    "pre_state": {
+      "task_type": "research",
+      "web_signal": "conflicted",
+      "deadline": "tight",
+      "source_quality": "mixed"
+    },
+    "trigger": "same pattern observed in another run",
+    "possible_branches": [
+      {"name": "answer_now", "description": "Answer immediately with minimal verification"},
+      {"name": "verify_then_answer", "description": "Verify sources before answering"},
+      {"name": "defer", "description": "Request more time or postpone"}
+    ],
+    "chosen_branch": "verify_then_answer",
+    "realized_value": 0.7,
+    "estimated_outcomes": [
+      {"branch_name": "answer_now", "estimated_value": -0.6, "confidence": 0.8},
+      {"branch_name": "defer", "estimated_value": -0.1, "confidence": 0.5}
+    ],
+    "constraints": {"accuracy_priority": "high"},
+    "provenance": {"source": "manual-demo", "domain": "agents"},
+    "confidence": 0.86,
+    "tags": ["agent", "verification"]
+  }
+]
