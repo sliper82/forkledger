@@ -1,5 +1,5 @@
 <p align="center">
-  <img src=".github/assets/logo.png" width="720" alt="ForkLedger" />
+  <img src="https://raw.githubusercontent.com/sliper82/forkledger/main/.github/assets/logo.png" width="720" alt="ForkLedger" />
 </p>
 
 <p align="center">
