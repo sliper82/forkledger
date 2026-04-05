@@ -267,3 +267,144 @@ class TestEmbeddings:
         eng.add_records_from_payload(SAMPLE_PAYLOAD)
         recs = eng.recommend({"task": "research", "signal": "mixed"})
         assert len(recs) > 0
+
+
+# ---------------------------------------------------------------------------
+# v0.4.0 — New features
+# ---------------------------------------------------------------------------
+
+class TestNewModels:
+    def test_updated_at_exists(self, engine):
+        r = engine.get("f1")
+        assert hasattr(r, "updated_at")
+        assert r.updated_at is not None
+
+    def test_namespace_default(self, engine):
+        r = engine.get("f1")
+        assert r.namespace == "default"
+
+    def test_outcome_source_default(self, engine):
+        r = engine.get("f1")
+        assert r.outcome_source == "observed"
+
+    def test_touch_updates_updated_at(self, tmp_path):
+        import time
+        eng = ForkLedgerEngine(tmp_path / "touch.json", backend="json")
+        eng.add_records_from_payload(SAMPLE_PAYLOAD)
+        r_before = eng.get("f1")
+        t_before = r_before.updated_at
+        time.sleep(0.05)
+        eng.update_outcome("f1", 99.0)
+        r_after = eng.get("f1")
+        assert r_after.updated_at > t_before
+
+    def test_outcome_source_preserved(self, tmp_path):
+        eng = ForkLedgerEngine(tmp_path / "src.json", backend="json")
+        eng.add_records_from_payload(SAMPLE_PAYLOAD)
+        r = eng.update_outcome("f1", 1.0, outcome_source="simulated")
+        assert r.outcome_source == "simulated"
+
+
+class TestNumericSimilarity:
+    def test_numeric_close_values_score_high(self, tmp_path):
+        """Records with numerically close states should score higher than very different ones."""
+        from forkledger.retrieval import _state_overlap
+        close = _state_overlap({"price": 100}, {"price": 101})
+        far   = _state_overlap({"price": 100}, {"price": 1000})
+        assert close > far
+        assert close > 0.9
+
+    def test_exact_numeric_match(self):
+        from forkledger.retrieval import _state_overlap
+        s = _state_overlap({"x": 5.0}, {"x": 5.0})
+        assert s == 1.0
+
+    def test_mixed_state(self):
+        from forkledger.retrieval import _state_overlap
+        s = _state_overlap(
+            {"task": "trade", "signal": "bullish", "price": 100},
+            {"task": "trade", "signal": "bullish", "price": 102},
+        )
+        assert s > 0.9  # mostly matching with small numeric diff
+
+
+class TestConstraintScoringFix:
+    def test_empty_constraints_scores_neutral(self):
+        from forkledger.retrieval import _constraint_overlap
+        # FIXED: empty query constraints → 0.5 (neutral), not 1.0
+        score = _constraint_overlap({"risk": "low"}, {})
+        assert score == 0.5
+
+    def test_matching_constraints_scores_high(self):
+        from forkledger.retrieval import _constraint_overlap
+        score = _constraint_overlap({"risk": "low"}, {"risk": "low"})
+        assert score == 1.0
+
+    def test_empty_record_constraints_scores_zero(self):
+        from forkledger.retrieval import _constraint_overlap
+        score = _constraint_overlap({}, {"risk": "low"})
+        assert score == 0.0
+
+
+class TestScoringWeights:
+    def test_default_weights_sum_to_one(self):
+        from forkledger.retrieval import ScoringWeights
+        import math
+        w = ScoringWeights()
+        total = (w.state_similarity + w.constraint_match +
+                 w.recency + w.confidence + w.regret_salience)
+        assert math.isclose(total, 1.0, abs_tol=1e-6)
+
+    def test_domain_preset_trading(self):
+        from forkledger.retrieval import ScoringWeights
+        w = ScoringWeights.for_domain("trading")
+        assert w.recency > ScoringWeights().recency  # trading weights recency more
+
+    def test_invalid_weights_raises(self):
+        from forkledger.retrieval import ScoringWeights
+        import pytest
+        with pytest.raises(ValueError):
+            ScoringWeights(state_similarity=0.9)  # doesn't sum to 1.0
+
+
+class TestNamespaceIsolation:
+    def test_namespace_filter(self, tmp_path):
+        eng = ForkLedgerEngine(tmp_path / "ns.db", backend="sqlite")
+        p1 = [{**SAMPLE_PAYLOAD[0], "fork_id": "ns-a1", "namespace": "agent_a"}]
+        p2 = [{**SAMPLE_PAYLOAD[1], "fork_id": "ns-b1", "namespace": "agent_b"}]
+        eng.add_records_from_payload(p1 + p2)
+        a_records = eng.load(namespace="agent_a")
+        b_records = eng.load(namespace="agent_b")
+        assert all(r.namespace == "agent_a" for r in a_records)
+        assert all(r.namespace == "agent_b" for r in b_records)
+        assert len(a_records) == 1
+        assert len(b_records) == 1
+
+
+class TestFTSSearch:
+    def test_fts_search_finds_by_trigger(self, tmp_path):
+        eng = ForkLedgerEngine(tmp_path / "fts.db", backend="sqlite")
+        eng.add_records_from_payload(SAMPLE_PAYLOAD)
+        results = eng.search("conflicting", limit=10)
+        # f1 has trigger "conflicting data"
+        assert any(r.fork_id == "f1" for r in results)
+
+    def test_fts_search_json_fallback(self, tmp_path):
+        eng = ForkLedgerEngine(tmp_path / "fts.json", backend="json")
+        eng.add_records_from_payload(SAMPLE_PAYLOAD)
+        results = eng.search("conflicting", limit=10)
+        assert isinstance(results, list)
+
+
+class TestAuditTrail:
+    def test_audit_has_updated_at(self, engine):
+        trail = engine.audit_trail()
+        assert all("updated_at" in e for e in trail)
+
+    def test_audit_has_outcome_source(self, engine):
+        trail = engine.audit_trail()
+        assert all("outcome_source" in e for e in trail)
+
+    def test_audit_has_namespace(self, engine):
+        trail = engine.audit_trail()
+        assert all("namespace" in e for e in trail)

@@ -2,7 +2,7 @@
 
 from .engine import ForkLedgerEngine
 from .models import Branch, ForkRecord, OutcomeEstimate
-from .retrieval import embeddings_available
+from .retrieval import embeddings_available, faiss_available, ScoringWeights, FaissIndex
 from .storage import JsonForkStore, SqliteForkStore
 from .mcp_server import mcp_available
 from .counterfactual import (
@@ -14,7 +14,7 @@ from .counterfactual import (
     normalized_regret,
 )
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 __all__ = [
     "Branch",
@@ -24,6 +24,9 @@ __all__ = [
     "SqliteForkStore",
     "OutcomeEstimate",
     "embeddings_available",
+    "faiss_available",
+    "ScoringWeights",
+    "FaissIndex",
     "mcp_available",
     "compute_regret",
     "fill_regret",

@@ -4,13 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "forkledger"
-version = "0.3.0"
+version = "0.4.0"
 description = "Branch-based decision memory for AI agents — stores choices, alternatives, and regret."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
 authors = [{ name = "sliper82" }]
 keywords = [
+  "rust", "performance", "fts",
   "ai", "memory", "agents", "decision-engine", "counterfactuals",
   "regret", "sqlite", "fastapi", "mcp", "langchain", "llm"
 ]
@@ -40,6 +41,17 @@ embeddings = [
 mcp = [
   "mcp>=1.0",
   "fastmcp>=0.1",
+]
+faiss = [
+  "faiss-cpu>=1.7",
+]
+postgres = [
+  "psycopg2-binary>=2.9",
+]
+dashboard = [
+  "streamlit>=1.35",
+  "pandas>=2.0",
+  "altair>=5.0",
 ]
 all = [
   "fastapi>=0.110",
