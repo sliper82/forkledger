@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 from .counterfactual import (
     fill_regret, accumulate_regret, branch_win_rate,
-    confidence_decay_factor, normalized_regret,
+    confidence_decay_factor,
 )
 from .models import ForkRecord
 from .policy import distill_policies

@@ -19,7 +19,7 @@ from __future__ import annotations
 import math
 import threading
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
@@ -320,7 +320,6 @@ def rank_records(
     query_embedding: Any | None = None
 
     if use_embeddings and _EMBEDDINGS_AVAILABLE and records:
-        import numpy as np
         all_texts = [_state_to_text(r.pre_state) for r in records] + [_state_to_text(current_state)]
         all_vecs = _batch_embed(all_texts, embedding_model)
         record_embeddings = list(all_vecs[:-1])

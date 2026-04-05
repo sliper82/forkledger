@@ -4,8 +4,8 @@
 
 <p align="center">
   <a href="https://github.com/sliper82/forkledger/actions"><img src="https://github.com/sliper82/forkledger/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://pypi.org/project/forkledger/"><img src="https://img.shields.io/pypi/v/forkledger?color=40c8ff" alt="PyPI" /></a>
-  <a href="https://pypi.org/project/forkledger/"><img src="https://img.shields.io/pypi/pyversions/forkledger" alt="Python" /></a>
+  <a href="https://github.com/sliper82/forkledger/releases"><img src="https://img.shields.io/github/v/release/sliper82/forkledger?color=40c8ff&label=version" alt="Version" /></a>
+  <img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python 3.10+" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License" /></a>
   <a href="https://github.com/sliper82/forkledger/blob/main/COMPARISON.md"><img src="https://img.shields.io/badge/vs-Mem0%20%7C%20Hindsight%20%7C%20LangMem-555" alt="Comparison" /></a>
 </p>
@@ -269,6 +269,73 @@ Run yourself:
 ```bash
 python benchmarks/locomo_benchmark.py --records 500 --queries 100
 ```
+---
+
+## Integrations
+
+### LangChain
+
+```bash
+pip install forkledger[langchain]
+```
+
+```python
+from forkledger.integrations.langchain import ForkLedgerMemory
+
+memory = ForkLedgerMemory(
+    store_path="decisions.db",
+    backend="sqlite",
+    agent_id="my-agent",
+    domain="research",   # pre-tuned scoring weights
+)
+
+# Record decisions manually
+memory.record_decision(
+    fork_id="dec-001",
+    situation={"task": "research", "signal": "mixed"},
+    trigger="Conflicting sources",
+    chosen="verify",
+    alternatives=["fast-publish", "wait"],
+    outcome=1.8,
+)
+
+# Or use as drop-in with ConversationChain
+from langchain.chains import ConversationChain
+chain = ConversationChain(llm=llm, memory=memory)
+```
+
+### AutoGen
+
+```bash
+pip install forkledger[autogen]
+```
+
+```python
+from autogen import AssistantAgent
+from forkledger.integrations.autogen import ForkLedgerHook
+
+hook = ForkLedgerHook(
+    store_path="decisions.db",
+    backend="sqlite",
+    agent_id="assistant",
+    domain="code",
+)
+
+# Attach to any AutoGen agent
+assistant = AssistantAgent("assistant", llm_config=llm_config)
+hook.attach(assistant)   # injects decision context into every message
+
+# Or use standalone
+hook.record(
+    situation={"task": "web_research", "sources": "multiple"},
+    trigger="Conflicting data",
+    chosen="verify_cross_reference",
+    alternatives=["use_first", "skip"],
+    outcome=2.1,
+)
+recs = hook.recommend({"task": "web_research", "sources": "multiple"})
+```
+
 
 ---
 
@@ -283,9 +350,9 @@ python benchmarks/locomo_benchmark.py --records 500 --queries 100
 - [x] PostgreSQL + pgvector backend
 - [x] Streamlit dashboard
 - [x] Benchmark suite
-- [ ] LangChain official memory adapter
-- [ ] AutoGen integration
-- [ ] PyPI release
+- [x] LangChain official memory adapter (`ForkLedgerMemory`)
+- [x] AutoGen integration (`ForkLedgerHook`, `ForkLedgerGroupChatManager`)
+- [x] PyPI release — `pip install forkledger`
 
 ---
 

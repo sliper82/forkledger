@@ -178,13 +178,15 @@ def main() -> None:
     elif cmd == "get":
         record = engine.get(args.fork_id)
         if record is None:
-            print(f"not found: {args.fork_id}", file=sys.stderr); sys.exit(1)
+            print(f"not found: {args.fork_id}", file=sys.stderr)
+            sys.exit(1)
         pprint(record.to_dict())
 
     elif cmd == "update-outcome":
         record = engine.update_outcome(args.fork_id, args.realized_value, args.confidence)
         if record is None:
-            print(f"not found: {args.fork_id}", file=sys.stderr); sys.exit(1)
+            print(f"not found: {args.fork_id}", file=sys.stderr)
+            sys.exit(1)
         print(f"updated: {record.fork_id}  value={record.realized_value}  "
               f"regret={record.regret_vector}")
 
