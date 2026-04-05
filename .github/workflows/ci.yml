@@ -14,7 +14,6 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
-
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -37,16 +36,17 @@ jobs:
           cache: pip
       - name: Install (api)
         run: pip install -e ".[api]"
-      - name: Verify API imports
+      - name: Verify API imports and routes
         run: |
           python -c "
           from forkledger.api import create_app
           app = create_app()
           print('API OK — routes:', len(app.routes))
+          assert len(app.routes) > 10, 'Expected >10 routes'
           "
 
   test-integrations:
-    name: Test LangChain + AutoGen integrations
+    name: Test integrations
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -54,7 +54,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - name: Install (langchain)
+      - name: Install with langchain
         run: pip install -e ".[dev]" langchain langchain-core
       - name: Test LangChain integration
         run: python examples/langchain_quickstart.py
@@ -70,7 +70,8 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install ruff
-      - run: ruff check src/ tests/
+      - name: Lint Python sources (exclude Rust)
+        run: ruff check src/ tests/
 
   build:
     name: Build distribution

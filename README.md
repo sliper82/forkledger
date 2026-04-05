@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://github.com/sliper82/forkledger/actions"><img src="https://github.com/sliper82/forkledger/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="https://pypi.org/project/forkledger/"><img src="https://img.shields.io/pypi/v/forkledger?color=40c8ff" alt="PyPI" /></a>
-  <a href="https://pypi.org/project/forkledger/"><img src="https://img.shields.io/pypi/pyversions/forkledger" alt="Python" /></a>
+  <img src="https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue" alt="Python" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License" /></a>
   <a href="https://github.com/sliper82/forkledger/blob/main/COMPARISON.md"><img src="https://img.shields.io/badge/vs-Mem0%20%7C%20Hindsight%20%7C%20LangMem-555" alt="Comparison" /></a>
 </p>
