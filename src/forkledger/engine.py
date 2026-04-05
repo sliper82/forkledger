@@ -1,8 +1,4 @@
-"""ForkLedger main engine.
-
-ForkLedgerEngine is the single entry point for all operations.
-Supports both JsonForkStore (default) and SqliteForkStore.
-"""
+"""ForkLedger main engine — v0.3.0."""
 
 from __future__ import annotations
 
@@ -10,7 +6,13 @@ import json
 from pathlib import Path
 from typing import Any, Literal
 
-from .counterfactual import fill_regret
+from .counterfactual import (
+    fill_regret,
+    accumulate_regret,
+    branch_win_rate,
+    confidence_decay_factor,
+    normalized_regret,
+)
 from .models import ForkRecord
 from .policy import distill_policies
 from .retrieval import rank_records, recommend_branches, embeddings_available
@@ -25,15 +27,12 @@ class ForkLedgerEngine:
     Parameters
     ----------
     store_path : str or Path
-        Path to the storage file (.json or .db).
     backend : "json" | "sqlite"
-        Storage backend. Default is "json" for backward compatibility.
-        Use "sqlite" for any serious workload.
     use_embeddings : bool
-        Enable semantic similarity via sentence-transformers.
-        Requires: pip install forkledger[embeddings]
     embedding_model : str
-        sentence-transformers model name. Default: "all-MiniLM-L6-v2"
+    confidence_half_life_days : float
+        Exponential decay half-life for confidence weighting.
+        Default: 60 days. Set to None to disable decay.
     """
 
     def __init__(
@@ -42,9 +41,11 @@ class ForkLedgerEngine:
         backend: StoreBackend = "json",
         use_embeddings: bool = False,
         embedding_model: str = "all-MiniLM-L6-v2",
+        confidence_half_life_days: float = 60.0,
     ) -> None:
         self.use_embeddings = use_embeddings and embeddings_available()
         self.embedding_model = embedding_model
+        self.confidence_half_life_days = confidence_half_life_days
 
         if backend == "sqlite":
             self.store: JsonForkStore | SqliteForkStore = SqliteForkStore(store_path)
@@ -56,13 +57,11 @@ class ForkLedgerEngine:
     # ------------------------------------------------------------------
 
     def add_record(self, record: ForkRecord) -> ForkRecord:
-        """Add a single ForkRecord. Regret is computed automatically."""
         filled = fill_regret(record)
         self.store.append([filled])
         return filled
 
     def add_records_from_payload(self, payload: list[dict[str, Any]]) -> list[ForkRecord]:
-        """Bulk-add from a list of raw dicts (e.g. loaded from JSON)."""
         records = [fill_regret(ForkRecord.from_dict(item)) for item in payload]
         self.store.append(records)
         return records
@@ -73,18 +72,12 @@ class ForkLedgerEngine:
         realized_value: float,
         confidence: float | None = None,
     ) -> ForkRecord | None:
-        """Update the realized value of an existing fork and recompute regret.
-
-        Returns the updated record, or None if fork_id not found.
-        """
         return self.store.update_outcome(fork_id, realized_value, confidence)
 
     def delete(self, fork_id: str) -> bool:
-        """Delete a fork by ID. Returns True if deleted, False if not found."""
         return self.store.delete(fork_id)
 
     def purge_expired(self) -> int:
-        """Remove all expired forks. Returns number of removed records."""
         return self.store.purge_expired()
 
     # ------------------------------------------------------------------
@@ -98,17 +91,12 @@ class ForkLedgerEngine:
         min_confidence: float = 0.0,
         limit: int | None = None,
     ) -> list[ForkRecord]:
-        """Load records with optional filters."""
         kwargs: dict[str, Any] = {"include_expired": include_expired}
-
-        # SqliteForkStore supports extra filters natively
         if isinstance(self.store, SqliteForkStore):
             kwargs["tags"] = tags
             kwargs["min_confidence"] = min_confidence
             kwargs["limit"] = limit
             return self.store.load(**kwargs)
-
-        # JsonForkStore: apply filters in Python
         records = self.store.load(include_expired=include_expired)
         if min_confidence > 0:
             records = [r for r in records if r.confidence >= min_confidence]
@@ -120,7 +108,6 @@ class ForkLedgerEngine:
         return records
 
     def get(self, fork_id: str) -> ForkRecord | None:
-        """Fetch a single fork by ID."""
         if isinstance(self.store, SqliteForkStore):
             return self.store.get(fork_id)
         records = {r.fork_id: r for r in self.store.load(include_expired=True)}
@@ -139,23 +126,6 @@ class ForkLedgerEngine:
         tags: list[str] | None = None,
         min_confidence: float = 0.0,
     ) -> list[dict[str, Any]]:
-        """Recommend branches for a given state.
-
-        Parameters
-        ----------
-        current_state : dict
-            Representation of the current decision context.
-        constraints : dict, optional
-            Active hard constraints.
-        top_k : int
-            Number of top historical forks to consider.
-        min_score : float
-            Minimum match score threshold (0.0–1.0).
-        tags : list[str], optional
-            Filter source records by tags.
-        min_confidence : float
-            Minimum confidence threshold for source records.
-        """
         records = self.load(tags=tags, min_confidence=min_confidence)
         return recommend_branches(
             records,
@@ -174,7 +144,6 @@ class ForkLedgerEngine:
         tags: list[str] | None = None,
         min_confidence: float = 0.0,
     ) -> list[tuple[ForkRecord, float]]:
-        """Rank all stored forks by similarity to current_state."""
         records = self.load(tags=tags, min_confidence=min_confidence)
         return rank_records(
             records,
@@ -189,34 +158,126 @@ class ForkLedgerEngine:
         min_support: int = 2,
         tags: list[str] | None = None,
         min_confidence: float = 0.0,
+        fuzzy: bool = True,
+        similarity_threshold: float = 0.6,
     ) -> list[dict[str, Any]]:
-        """Distill low-regret policies from repeated decision states."""
+        """Distill low-regret policies.
+
+        Args:
+            min_support: Minimum records per state pattern.
+            fuzzy: Use fuzzy clustering (recommended). Default True.
+            similarity_threshold: State overlap threshold for fuzzy mode.
+        """
         return distill_policies(
             self.load(tags=tags, min_confidence=min_confidence),
             min_support=min_support,
+            fuzzy=fuzzy,
+            similarity_threshold=similarity_threshold,
         )
+
+    # ------------------------------------------------------------------
+    # Analytics — Tier 2 additions
+    # ------------------------------------------------------------------
+
+    def accumulated_regret(
+        self,
+        tags: list[str] | None = None,
+        min_confidence: float = 0.0,
+    ) -> dict[str, float]:
+        """Return CFR-style accumulated weighted regret per branch across all records.
+
+        Uses confidence × time-decay weighting.
+        Lower = historically better branch.
+        """
+        records = self.load(tags=tags, min_confidence=min_confidence)
+        return accumulate_regret(records, self.confidence_half_life_days)
+
+    def win_rates(
+        self,
+        tags: list[str] | None = None,
+        min_confidence: float = 0.0,
+    ) -> dict[str, dict[str, Any]]:
+        """Return win rate per branch (how often each branch was the best choice).
+
+        Returns: {branch: {"wins": int, "appearances": int, "win_rate": float}}
+        """
+        records = self.load(tags=tags, min_confidence=min_confidence)
+        return branch_win_rate(records)
+
+    def decay_factor(self, fork_id: str) -> float | None:
+        """Return the current confidence decay factor for a specific fork.
+
+        1.0 = fresh record. Approaches 0.0 as record ages.
+        """
+        record = self.get(fork_id)
+        if record is None:
+            return None
+        return confidence_decay_factor(record.created_at, self.confidence_half_life_days)
+
+    def audit_trail(
+        self,
+        tags: list[str] | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Return a human-readable audit trail of all decisions.
+
+        Sorted by creation date, newest first.
+        Includes decay factor for each record.
+        """
+        records = self.load(tags=tags, limit=limit)
+        trail = []
+        for r in records:
+            decay = confidence_decay_factor(r.created_at, self.confidence_half_life_days)
+            trail.append({
+                "fork_id":       r.fork_id,
+                "created_at":    r.created_at,
+                "trigger":       r.trigger,
+                "chosen_branch": r.chosen_branch,
+                "realized_value":r.realized_value,
+                "confidence":    r.confidence,
+                "decay_factor":  round(decay, 4),
+                "effective_weight": round(r.confidence * decay, 4),
+                "regret_vector": r.regret_vector,
+                "tags":          r.tags,
+            })
+        return trail
 
     # ------------------------------------------------------------------
     # Stats & diagnostics
     # ------------------------------------------------------------------
 
     def stats(self) -> dict[str, Any]:
-        """Return store statistics. Richer output for SQLite backend."""
         if isinstance(self.store, SqliteForkStore):
-            return self.store.stats()
-        records = self.load(include_expired=True)
-        return {
-            "total_forks":    len(records),
-            "avg_confidence": round(sum(r.confidence for r in records) / max(len(records), 1), 4),
-        }
+            s = self.store.stats()
+        else:
+            records = self.load(include_expired=True)
+            s = {
+                "total_forks":    len(records),
+                "avg_confidence": round(
+                    sum(r.confidence for r in records) / max(len(records), 1), 4
+                ),
+            }
+        # Add win rates to stats
+        try:
+            wr = self.win_rates()
+            if wr:
+                top_winner = max(wr, key=lambda b: wr[b]["win_rate"])
+                s["top_winning_branch"] = {
+                    "branch":   top_winner,
+                    "win_rate": wr[top_winner]["win_rate"],
+                }
+        except Exception:
+            pass
+        return s
 
     def info(self) -> dict[str, Any]:
-        """Return engine configuration info."""
         return {
-            "backend":            type(self.store).__name__,
-            "use_embeddings":     self.use_embeddings,
-            "embedding_model":    self.embedding_model if self.use_embeddings else None,
-            "embeddings_package": embeddings_available(),
+            "backend":                  type(self.store).__name__,
+            "use_embeddings":           self.use_embeddings,
+            "embedding_model":          self.embedding_model if self.use_embeddings else None,
+            "embeddings_package":       embeddings_available(),
+            "confidence_half_life_days": self.confidence_half_life_days,
+            "version":                  "0.3.0",
         }
 
     # ------------------------------------------------------------------
@@ -225,17 +286,14 @@ class ForkLedgerEngine:
 
     @staticmethod
     def load_payload_file(path: str | Path) -> list[dict[str, Any]]:
-        """Load a JSON file containing a list of fork record dicts."""
         return json.loads(Path(path).read_text(encoding="utf-8"))
 
     def export_json(self, path: str | Path) -> None:
-        """Export all records to a JSON file."""
         records = self.load(include_expired=True)
         payload = [r.to_dict() for r in records]
         Path(path).write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
     def import_json(self, path: str | Path) -> int:
-        """Import records from a JSON file. Returns count of imported records."""
         payload = self.load_payload_file(path)
         records = self.add_records_from_payload(payload)
         return len(records)

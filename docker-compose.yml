@@ -1,0 +1,22 @@
+version: "3.9"
+
+services:
+  forkledger:
+    build: .
+    image: forkledger:latest
+    ports:
+      - "8000:8000"
+    volumes:
+      - forkledger_data:/data
+    environment:
+      - FORKLEDGER_STORE=/data/store.db
+      - FORKLEDGER_BACKEND=sqlite
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  forkledger_data:

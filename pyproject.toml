@@ -4,15 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "forkledger"
-version = "0.2.0"
-description = "A branch-based memory engine for AI systems that learns from decisions, alternatives, and regret."
+version = "0.3.0"
+description = "Branch-based decision memory for AI agents — stores choices, alternatives, and regret."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
-authors = [
-  { name = "sliper82" }
+authors = [{ name = "sliper82" }]
+keywords = [
+  "ai", "memory", "agents", "decision-engine", "counterfactuals",
+  "regret", "sqlite", "fastapi", "mcp", "langchain", "llm"
 ]
-keywords = ["ai", "memory", "agents", "decision-engine", "counterfactuals", "regret", "sqlite", "fastapi"]
 classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",
@@ -24,7 +25,6 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
-# Core has zero required dependencies
 dependencies = []
 
 [project.optional-dependencies]
@@ -37,19 +37,33 @@ embeddings = [
   "sentence-transformers>=2.7",
   "numpy>=1.26",
 ]
+mcp = [
+  "mcp>=1.0",
+  "fastmcp>=0.1",
+]
 all = [
   "fastapi>=0.110",
   "uvicorn[standard]>=0.29",
   "pydantic>=2.0",
   "sentence-transformers>=2.7",
   "numpy>=1.26",
+  "mcp>=1.0",
+  "fastmcp>=0.1",
 ]
 dev = [
   "pytest>=8",
-  "httpx>=0.27",   # for FastAPI test client
+  "httpx>=0.27",
   "fastapi>=0.110",
   "pydantic>=2.0",
+  "ruff>=0.4",
 ]
+
+[project.urls]
+Homepage = "https://github.com/sliper82/forkledger"
+Documentation = "https://github.com/sliper82/forkledger#readme"
+Repository = "https://github.com/sliper82/forkledger"
+"Bug Tracker" = "https://github.com/sliper82/forkledger/issues"
+Changelog = "https://github.com/sliper82/forkledger/blob/main/CHANGELOG.md"
 
 [project.scripts]
 forkledger = "forkledger.cli:main"
@@ -62,3 +76,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
