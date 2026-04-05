@@ -1,17 +1,19 @@
 ---
 name: Bug report
-about: Report a reproducible problem
-title: "[bug] "
+about: Something is broken
 labels: bug
-assignees: ''
 ---
 
-## Summary
+**What happened?**
 
-## Steps to reproduce
+**What did you expect?**
 
-## Expected behavior
+**Minimal reproduction:**
+```python
+# paste here
+```
 
-## Actual behavior
-
-## Environment
+**Environment:**
+- ForkLedger version:
+- Python version:
+- Backend (json/sqlite):

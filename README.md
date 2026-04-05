@@ -1,28 +1,56 @@
-# ForkLedger
+<p align="center">
+  <img src=".github/assets/logo.png" width="700" alt="ForkLedger" />
+</p>
 
-**A branch-based memory engine for AI systems that learns from decisions, alternatives, and regret.**
+<p align="center">
+  <a href="https://github.com/sliper82/forkledger/actions"><img src="https://github.com/sliper82/forkledger/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://pypi.org/project/forkledger/"><img src="https://img.shields.io/pypi/v/forkledger?color=5a32ff" alt="PyPI" /></a>
+  <a href="https://pypi.org/project/forkledger/"><img src="https://img.shields.io/pypi/pyversions/forkledger" alt="Python" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License" /></a>
+</p>
 
----
-
-Most AI memory systems answer: *"What happened?"*
-
-ForkLedger answers: *"When this situation appeared before — what options existed, which path was chosen, and what did that choice cost?"*
-
----
-
-## Why ForkLedger
-
-Traditional memory stores messages, chunks, or embeddings.  
-ForkLedger stores **decision geometry**: the state before a choice, the available branches, the path taken, the observed result, and the estimated regret of every alternative.
-
-Over time, the engine learns which branches consistently lead to lower regret under similar conditions — and surfaces that knowledge when it matters.
+<p align="center">
+  <b>The memory layer your AI agents actually need.</b><br/>
+  Not what was said — but what was chosen, what it cost, and what to do differently next time.
+</p>
 
 ---
 
-## Installation
+## The problem with AI memory today
+
+Every major memory system stores **what happened**:
+messages, chunks, embeddings, graph edges.
+
+None of them store **why a decision was made** — or what it cost.
+
+That means every time your agent faces the same situation, it starts from zero. It can't learn from its own mistakes. It has no way to say: *"Last time I did this, it cost me. Don't do it again."*
+
+**ForkLedger fixes this.**
+
+---
+
+## What ForkLedger stores
+
+A ForkLedger **fork** is the atomic unit of decision memory:
+
+```
+situation before the choice
+    ↓
+[ branch A ] [ branch B ✓ chosen ] [ branch C ]
+                    ↓
+              observed outcome
+                    ↓
+         regret vector: what each path cost
+```
+
+Over time, ForkLedger learns which branches produce the lowest regret under similar conditions — and surfaces that knowledge when it matters.
+
+---
+
+## Install
 
 ```bash
-# Core (zero dependencies)
+# Zero dependencies core
 pip install forkledger
 
 # With REST API
@@ -37,105 +65,94 @@ pip install forkledger[all]
 
 ---
 
-## Quickstart
+## 60-second demo
 
 ```python
 from forkledger import ForkLedgerEngine, ForkRecord, Branch, OutcomeEstimate
 
 engine = ForkLedgerEngine(".forkledger/store.db", backend="sqlite")
 
-record = ForkRecord(
-    fork_id="trade-001",
-    pre_state={"market": "BTC", "signal": "breakout", "volume": "high"},
-    trigger="RSI crossed 70 with volume confirmation",
-    possible_branches=[Branch(name="enter"), Branch(name="wait"), Branch(name="short")],
-    chosen_branch="enter",
-    realized_value=2.4,
-    estimated_outcomes=[
-        OutcomeEstimate(branch_name="wait", estimated_value=0.0),
+# Record a decision
+engine.add_record(ForkRecord(
+    fork_id    = "trade-2024-001",
+    pre_state  = {"market": "BTC", "signal": "breakout", "volume": "high"},
+    trigger    = "RSI crossed 70 with volume confirmation",
+    possible_branches = [
+        Branch(name="enter"),
+        Branch(name="wait"),
+        Branch(name="short"),
+    ],
+    chosen_branch    = "enter",
+    realized_value   = 2.4,
+    estimated_outcomes = [
+        OutcomeEstimate(branch_name="wait",  estimated_value=0.0),
         OutcomeEstimate(branch_name="short", estimated_value=-1.5),
     ],
-    confidence=0.8,
-    tags=["crypto", "momentum"],
-)
-
-engine.add_record(record)
+    confidence = 0.8,
+    tags       = ["crypto", "momentum"],
+))
 
 # Later: update with actual outcome
-engine.update_outcome("trade-001", realized_value=1.9, confidence=0.85)
+engine.update_outcome("trade-2024-001", realized_value=1.9)
 
-# Recommend branches for a new similar situation
+# Ask: given this new situation, what should I do?
 recs = engine.recommend(
-    current_state={"market": "ETH", "signal": "breakout", "volume": "high"},
-    constraints={"risk": "medium"},
-    top_k=3,
+    current_state = {"market": "ETH", "signal": "breakout", "volume": "high"},
+    top_k = 3,
 )
-
-for rec in recs:
-    print(rec["branch"], rec["score"])
+# → [{"branch": "enter", "score": 0.82, "support": [...]}, ...]
 ```
 
 ---
 
-## Core Concepts
+## REST API
 
-### Fork Record
-
-The atomic unit of memory. Each fork captures:
-
-| Field | Description |
-|---|---|
-| `pre_state` | The world before the decision |
-| `trigger` | Why this decision was consequential |
-| `possible_branches` | All available options |
-| `chosen_branch` | What was actually done |
-| `realized_value` | Observed outcome (updatable) |
-| `estimated_outcomes` | Counterfactual estimates for alternatives |
-| `regret_vector` | Opportunity cost per branch (auto-computed) |
-| `constraints` | Active hard limits at decision time |
-| `confidence` | Record trustworthiness (0–1) |
-| `expiry` | Optional invalidation timestamp |
-| `tags` | Filterable labels |
-
-### Regret Vector
-
-ForkLedger computes regret automatically on every write and update:
-
-```
-regret(branch) = best_value_in_record - value_of_branch
+```bash
+pip install forkledger[api]
+forkledger serve --backend sqlite --store store.db
+# → http://localhost:8000/docs
 ```
 
-Zero regret = best available choice. The engine uses this to rank branches when you request a recommendation.
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/health` | Health check |
+| `GET` | `/stats` | Store statistics |
+| `GET` | `/forks` | List forks (filterable) |
+| `POST` | `/forks` | Add a fork |
+| `PATCH` | `/forks/{id}/outcome` | Update realized value |
+| `DELETE` | `/forks/{id}` | Delete a fork |
+| `POST` | `/recommend` | Get branch recommendations |
+| `GET` | `/policies` | Distilled low-regret policies |
 
-### Policy Distillation
-
-When the same state pattern appears multiple times, ForkLedger groups those forks and computes average regret per branch. The result is a lightweight policy surface: under this state, this branch has historically produced the lowest regret.
+Full Swagger UI at `/docs`.
 
 ---
 
-## Storage Backends
+## CLI
 
-### JSON (default, zero dependencies)
+```bash
+# Record a decision
+forkledger add decisions.json
 
-```python
-engine = ForkLedgerEngine(".forkledger/store.json", backend="json")
+# What should I do given this state?
+forkledger recommend --state '{"signal": "breakout", "volume": "high"}' --top-k 3
+
+# Update outcome after the fact
+forkledger update-outcome trade-001 1.9 --confidence 0.85
+
+# What patterns emerge from repeated states?
+forkledger policies --min-support 3
+
+# Start API server
+forkledger serve --backend sqlite --port 8000
+
+# Stats
+forkledger stats
 ```
-
-Good for: prototyping, local scripts, <5 000 records.
-
-### SQLite (recommended for production)
-
-```python
-engine = ForkLedgerEngine(".forkledger/store.db", backend="sqlite")
-```
-
-Good for: any serious workload. Adds indexed queries, atomic upserts, expiry enforcement, and rich stats.
 
 ---
 
-## Semantic Similarity (Optional)
-
-Install the embeddings extra to enable cosine similarity retrieval via `sentence-transformers`:
+## Semantic similarity (optional)
 
 ```bash
 pip install forkledger[embeddings]
@@ -144,128 +161,63 @@ pip install forkledger[embeddings]
 ```python
 engine = ForkLedgerEngine(
     ".forkledger/store.db",
-    backend="sqlite",
-    use_embeddings=True,
-    embedding_model="all-MiniLM-L6-v2",
+    backend       = "sqlite",
+    use_embeddings = True,           # cosine similarity via sentence-transformers
+    embedding_model = "all-MiniLM-L6-v2",
 )
 ```
 
-If `sentence-transformers` is not installed, ForkLedger falls back silently to keyword overlap scoring.
+Without `sentence-transformers` installed, ForkLedger falls back silently to keyword overlap scoring. Zero breaking changes.
 
 ---
 
-## REST API
+## Storage backends
 
-Requires: `pip install forkledger[api]`
-
-### Start the server
-
-```bash
-forkledger serve --backend sqlite --store .forkledger/store.db --port 8000
-```
-
-Or with uvicorn directly:
-
-```bash
-uvicorn forkledger.api:app --reload
-```
-
-Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs)
-
-### Endpoints
-
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/health` | Health check |
-| `GET` | `/info` | Engine configuration |
-| `GET` | `/stats` | Store statistics |
-| `GET` | `/forks` | List forks (filterable) |
-| `GET` | `/forks/{id}` | Get single fork |
-| `POST` | `/forks` | Add one fork |
-| `POST` | `/forks/bulk` | Bulk add forks |
-| `PATCH` | `/forks/{id}/outcome` | Update realized value |
-| `DELETE` | `/forks/{id}` | Delete fork |
-| `DELETE` | `/forks/expired` | Purge all expired |
-| `POST` | `/recommend` | Recommend branches |
-| `POST` | `/rank` | Rank forks by similarity |
-| `GET` | `/policies` | Distilled low-regret policies |
-| `GET` | `/export` | Export all records as JSON |
-
----
-
-## CLI Reference
-
-```bash
-# Add records from file
-forkledger add records.json
-
-# List records
-forkledger list --limit 20 --tags crypto --min-confidence 0.7
-
-# Get single record
-forkledger get trade-001
-
-# Update outcome after the fact
-forkledger update-outcome trade-001 1.9 --confidence 0.85
-
-# Recommend branches for current state
-forkledger recommend --state '{"signal": "breakout", "volume": "high"}' --top-k 3
-
-# View distilled policies
-forkledger policies --min-support 3
-
-# Stats
-forkledger stats
-
-# Remove expired records
-forkledger purge-expired
-
-# Export / import
-forkledger export backup.json
-forkledger import backup.json
-
-# Start API server
-forkledger serve --backend sqlite --port 8000
-
-# Use SQLite backend
-forkledger --backend sqlite --store store.db list
-```
-
----
-
-## Python API Reference
+| Backend | Best for | Deps |
+|---------|----------|------|
+| `json` (default) | Prototyping, scripts, <5k records | None |
+| `sqlite` | Production, concurrent agents, large stores | None (stdlib) |
 
 ```python
-# Engine init
-engine = ForkLedgerEngine(store_path, backend="json"|"sqlite", use_embeddings=False)
+# JSON
+engine = ForkLedgerEngine("store.json", backend="json")
 
-# Write
-engine.add_record(record)                          # single record
-engine.add_records_from_payload(list_of_dicts)     # bulk from dicts
+# SQLite — indexed, atomic upserts, expiry enforcement
+engine = ForkLedgerEngine("store.db", backend="sqlite")
+```
 
-# Update
-engine.update_outcome(fork_id, realized_value, confidence=None)
+---
 
-# Read
-engine.load(include_expired, tags, min_confidence, limit)
-engine.get(fork_id)
+## Core concepts
 
-# Delete
-engine.delete(fork_id)
-engine.purge_expired()
+### Regret vector
 
-# Retrieval
-engine.recommend(current_state, constraints, top_k, min_score, tags, min_confidence)
-engine.rank(current_state, constraints, tags, min_confidence)
-engine.policies(min_support, tags, min_confidence)
+Computed automatically on every write and every outcome update:
 
-# Diagnostics
-engine.stats()
-engine.info()
+```
+regret(branch) = best_value_in_record − value_of_branch
+```
 
-# Import / export
-engine.export_json(path)
-engine.import_json(path)
+Zero regret = the best available choice at that time. The engine uses this signal to rank branches when you request a recommendation.
+
+### Policy distillation
+
+When the same state pattern appears repeatedly, ForkLedger groups those forks and computes average regret per branch:
+
+```python
+engine.policies(min_support=3)
+# → [{"state": {...}, "recommended_branch": "verify", "support": 7, ...}]
+```
+
+This produces a lightweight policy surface: *under this state, this branch has historically produced the lowest regret.*
+
+### Expiry
+
+Memories go stale. Set an expiry and ForkLedger handles the rest:
+
+```python
+ForkRecord(..., expiry="2024-12-31T00:00:00Z")
+engine.purge_expired()  # or it's enforced automatically at query time
 ```
 
 ---
@@ -275,47 +227,61 @@ engine.import_json(path)
 ```
 ForkLedgerEngine
 ├── storage/
-│   ├── JsonForkStore      — flat file, zero deps
-│   └── SqliteForkStore    — indexed, production-ready
+│   ├── JsonForkStore      — flat file, zero deps, backward compat
+│   └── SqliteForkStore    — indexed, atomic, production-ready
 ├── counterfactual.py      — regret computation
-├── retrieval.py           — scoring + embedding similarity
+├── retrieval.py           — scoring pipeline + optional embeddings
 ├── policy.py              — policy distillation from repeated states
-├── api.py                 — FastAPI REST layer
-└── cli.py                 — command-line interface
+├── api.py                 — FastAPI REST layer (15 endpoints)
+└── cli.py                 — full CLI (15 commands)
 ```
 
-Scoring weights (retrieval):
+**Retrieval scoring weights:**
 
-| Signal | Weight |
-|---|---|
-| State similarity | 45% |
-| Constraint match | 20% |
-| Recency | 15% |
-| Confidence | 10% |
-| Regret salience | 10% |
+| Signal | Weight | Notes |
+|--------|--------|-------|
+| State similarity | 45% | Keyword or embedding |
+| Constraint match | 20% | Hard limits |
+| Recency | 15% | Decays over 30 days |
+| Confidence | 10% | Record trustworthiness |
+| Regret salience | 10% | High-stakes forks weighted more |
 
 ---
 
-## Extension Points
+## Who is this for
 
-- **Learned state encoders** — replace keyword overlap with domain-trained embeddings
-- **Simulator-backed counterfactuals** — run alternatives in simulation before committing
-- **Multi-agent fork sharing** — agents learn from each other's decisions
-- **Time-decay policies** — old evidence loses weight automatically
-- **Webhook on outcome update** — notify external systems when regret is recomputed
-- **Evaluation dashboards** — visualize decision history and policy confidence
+- **Agent developers** building systems that make repeated decisions and need to improve over time
+- **AI researchers** studying decision memory, counterfactual reasoning, or policy learning
+- **ML engineers** who need an audit trail of their agent's choices, not just its outputs
+- **Anyone** tired of agents that repeat the same mistakes
+
+---
+
+## Roadmap
+
+- [ ] Fuzzy policy clustering (beyond exact state fingerprinting)
+- [ ] Configurable scoring weights per domain
+- [ ] LangChain + LlamaIndex + AutoGen integrations
+- [ ] Data migration system for schema versioning
+- [ ] Async API (asyncio + FastAPI)
+- [ ] Web dashboard for decision history visualization
+- [ ] Multi-agent fork sharing
 
 ---
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). All contributions welcome.
+Issues, PRs and ideas welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-Tests: `pytest`  
-Lint: `ruff check src/`
+```bash
+git clone https://github.com/sliper82/forkledger
+cd forkledger
+pip install -e ".[dev]"
+pytest
+```
 
 ---
 
 ## License
 
-Apache 2.0 — see [LICENSE](LICENSE).
+[Apache 2.0](LICENSE)

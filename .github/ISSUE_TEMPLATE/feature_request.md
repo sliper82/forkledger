@@ -1,13 +1,11 @@
 ---
 name: Feature request
-about: Suggest an improvement
-title: "[feature] "
+about: Suggest an improvement or new capability
 labels: enhancement
-assignees: ''
 ---
 
-## Problem
+**What problem does this solve?**
 
-## Proposed change
+**Proposed solution:**
 
-## Why it matters
+**Alternatives considered:**
